@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Light mode. values-night/colors.xml has the dark versions of the same names. -->
+    <color name="text">#FF0B0B0B</color>
+    <!-- The picked field in the Example: Apple system blue -->
+    <color name="select_blue">#FF007AFF</color>
+</resources>

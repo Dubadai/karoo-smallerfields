@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Karoo's own field icon (KarooType.Glyph.ASCENT), 38-unit viewport, glyph from about 4 to 34. Tinted in code. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="38dp" android:height="38dp"
+    android:viewportWidth="38" android:viewportHeight="38">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M33.9703,18.9742L33.9703,31.9185L4,31.9185L4,28.9314L17.9862,21.9613L24.9793,25.9443L33.9703,18.9742ZM28.9019,8.1416L28.9019,11.1287L4,23.2486L4,20.2613L28.9019,8.1416ZM33.0385,7.6397l-11.2016,-3.9937l-0.8652,2.6041l6.7924,2.4216l-12.4096,6.0526l1.2159,2.493l12.4056,-6.0506l-2.1771,7.1376l4.1113,-2.9426z" />
+</vector>

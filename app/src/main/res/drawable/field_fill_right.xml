@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A zone background, tinted in code (right corners rounded like the tile). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FFFFFFFF" />
+    <corners android:topRightRadius="14px" android:bottomRightRadius="14px" />
+</shape>

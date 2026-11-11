@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A SmallerFields tile as a layout (side), so it reflows to the height the Karoo really gives
+     it (a map page with a route makes rows shorter without telling the app). Halves are added by FieldViews. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent">
+    <LinearLayout android:id="@+id/pair" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:orientation="horizontal" />
+    <!-- Single tile: the line between the two data -->
+    <ImageView android:id="@+id/divider" android:layout_width="1px" android:layout_height="match_parent"
+        android:layout_gravity="center" android:background="#FF7D7D7D" android:visibility="gone"
+        android:importantForAccessibility="no" />
+</FrameLayout>

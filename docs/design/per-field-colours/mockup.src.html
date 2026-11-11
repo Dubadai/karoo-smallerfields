@@ -1,0 +1,695 @@
+<meta charset="utf-8">
+<title>BetterFields Per-Field Colours</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  @font-face { font-family: PlexReg; src: url(__PLEX_REGULAR__); }
+  @font-face { font-family: PlexMed; src: url(__PLEX_MEDIUM__); }
+  @font-face { font-family: PlexSemi; src: url(__PLEX_SEMIBOLD__); }
+  @font-face { font-family: PlexCond; src: url(__PLEX_COND__); }
+  :root { --bg: #2A2A2A; --ink: #EDEDED; --muted: #9A9A9A; color-scheme: dark; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.4 PlexMed, system-ui, sans-serif; }
+  main { max-width: 820px; margin: 0 auto; padding-block: 24px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h2 { font: 20px PlexSemi, sans-serif; margin: 40px 0 4px; }
+  h2:first-child { margin-top: 0; }
+  p.note { color: var(--muted); margin: 0 0 14px; max-width: 640px; }
+  .row { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+  .row canvas { max-width: 100%; height: auto !important; }
+</style>
+<main id="out"></main>
+<script>
+/*__KAROO_DEVICE_JS__*/
+</script>
+<script>
+const ICONS = "__ICONS__";
+const img = s => new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.src = s; });
+
+// Showcase numbers (design-assets/tools/field-gallery/showcase.json)
+const F = {
+  // short: the label in a BetterFields half, where the icon says the rest (bolt = power, flag-clock = lap)
+  power: { label: '3S POWER', short: '3S', value: '280', icon: 'bolt', zone: 4, kind: 'power' },   // Z4 at 280 W
+  hr:    { label: 'HR', short: 'HR', value: '132', icon: 'heart', zone: 2, kind: 'hr' },        // Z2 at 132 bpm
+  speed: { label: 'SPEED', short: 'KM/H', value: '28.4', icon: 'speed' },
+  lap:   { label: 'LAP TIME', short: 'LAP', value: '4:21', icon: 'lap-timer' },
+};
+// Zone colours: the Karoo's own. Its ride app colours HR and power zones from ONE table
+// (climb1..7, same in light and dark, black text on them) and picks by how many zones the rider
+// profile has (u8.d): 5 zones (HR) → c1 c2 c3 c4 c6; 7 zones (power) → c1..c7.
+// Number in the zone colour: on white the deeper versions (BetterIntervals chart_hr light), on black the originals.
+const KAROO = [null, '#60EEB2', '#00B988', '#FFF500', '#FB8C65', '#FE581F', '#D60404', '#B700A2'];
+const KAROO_DEEP = [null, '#20AA78', '#007A5A', '#B9A300', '#E2683A', '#D9480F', '#C40404', '#A3008F'];
+const PICKS = { 5: [1, 2, 3, 4, 6], 7: [1, 2, 3, 4, 5, 6, 7] };
+const palette = zones => ({
+  strong: [null, ...PICKS[zones].map(i => KAROO[i])],
+  deep:   [null, ...PICKS[zones].map(i => KAROO_DEEP[i])],
+  bright: [null, ...PICKS[zones].map(i => KAROO[i])],
+});
+const Z = { hr: palette(5), power: palette(7) };
+const mix = (hex, base, t) => {             // hex over base at t (0..1)
+  const h = x => [1, 3, 5].map(i => parseInt(x.slice(i, i + 2), 16));
+  const [a, b] = [h(hex), h(base)];
+  return '#' + a.map((v, i) => Math.round(b[i] + (v - b[i]) * t).toString(16).padStart(2, '0')).join('');
+};
+// Colours for one half: { bg, ink (label + icon), num }
+function colours(f, dark, { num = 'bw', bg = 'none' } = {}) {
+  const ink = dark ? '#FFFFFF' : '#000000';
+  const zs = f.zone ? Z[f.kind] : null;
+  if (!zs) return { bg: null, ink, num: ink };
+  const z = f.zone;
+  if (bg === 'strong')                       // Karoo: strong zone colour, black text (both modes)
+    return { bg: zs.strong[z], ink: '#000000', num: num === 'zone' ? mix(zs.strong[z], '#000000', 0.42) : '#000000', strong: true };  // zone number on it: a dark shade of the zone
+  if (bg === 'soft')                         // tonal: a light wash of the zone colour
+    return { bg: mix(zs.strong[z], dark ? '#000000' : '#FFFFFF', dark ? 0.30 : 0.22), ink,
+             num: num === 'zone' ? (dark ? zs.bright[z] : zs.deep[z]) : ink };
+  return { bg: null, ink, num: num === 'zone' ? (dark ? zs.bright[z] : zs.deep[z]) : ink };
+}
+
+function text(ctx, s, font, size, color, right, baseline, maxW = 1e9, scaleX = 1) {
+  ctx.font = `${size}px ${font}`;
+  let w = ctx.measureText(s).width * scaleX;
+  if (w > maxW) { size *= maxW / w; ctx.font = `${size}px ${font}`; w = maxW; }
+  ctx.save(); ctx.translate(right, baseline); ctx.scale(scaleX, 1);
+  ctx.fillStyle = color; ctx.textAlign = 'right'; ctx.fillText(s, 0, 0); ctx.restore();
+  return size;
+}
+function iconAt(ctx, name, dark, x, y, k = 1) {
+  const i = ICONS_IMG[`${name}-${dark ? 'dark' : 'light'}`];
+  if (i) ctx.drawImage(i, x, y, i.width * k, i.height * k);
+}
+
+// A Karoo stock field (same metrics as compose.swift)
+function stock(ctx, r, f, dark) {
+  const ink = dark ? '#FFF' : '#000';
+  const ls = r.h < 150 ? 28 : 31.875;
+  text(ctx, f.label, 'PlexCond', ls, ink, r.x + r.w - 8, r.y + 8 + ls * 0.82, r.w - 90);
+  iconAt(ctx, f.icon, dark, r.x + 6, r.y + 6 + ls * 0.82 - 40 * 0.62);
+  text(ctx, f.value, 'PlexReg', Math.min(r.h * 0.58, 116), ink, r.x + r.w - 8, r.y + r.h - r.h * 0.08, r.w - 16, 0.82);
+}
+
+// One half of a BetterFields tile: the same parts as a Karoo field, smaller.
+function half(ctx, r, f, dark, opts) {
+  const c = colours(f, dark, opts);
+  if (c.bg) { ctx.fillStyle = c.bg; ctx.fillRect(r.x, r.y, r.w, r.h); }
+  const stacked = r.w > r.h * 1.8;
+  const ls = stacked ? 24 : 26;           // short labels, close to the Karoo's 28 / 31.875
+  const k = stacked ? 0.7 : 0.75;          // icons bigger: they carry the meaning
+  const iw = ICONS_IMG[`${f.icon}-light`].width * k;
+  text(ctx, f.short || f.label, 'PlexCond', ls, c.ink, r.x + r.w - 8, r.y + 7 + ls * 0.82, r.w - 8 - (7 + iw + 6));
+  const iy = r.y + 5 + ls * 0.82 - 40 * k * 0.62;
+  if (c.bg) {   // icons are opaque (white or black ground): multiply the black one, screen the white one
+    const white = c.ink === '#FFFFFF', i = ICONS_IMG[`${f.icon}-${white ? 'dark' : 'light'}`];
+    ctx.save(); ctx.globalCompositeOperation = white ? 'screen' : 'multiply';
+    ctx.drawImage(i, r.x + 7, iy, i.width * k, i.height * k); ctx.restore();
+  } else iconAt(ctx, f.icon, dark, r.x + 7, iy, k);
+  const size = stacked ? r.h * 0.66 : Math.min(r.h * 0.5, 84);
+  text(ctx, f.value, opts.numFont || 'PlexReg', size, c.num, r.x + r.w - 10, r.y + r.h - (stacked ? 7 : r.h * 0.08), r.w - 24, 0.82);
+  return !!c.bg;
+}
+
+// The tile drawn as two small Karoo tiles: the page grey fills the gap, each half is its own card
+// (Karoo radius 14, 1 px #7D7D7D border). Gaps as between the Karoo's own tiles: 2 px between
+// columns, 6 px between rows (the Karoo's 5-row pages; 12 px on 4-row pages).
+function betterFields(ctx, r, a, b, dark, opts = {}) {
+  const layout = opts.layout || 'side';
+  if (opts.tiles === 'single' || opts.boundaries === false) {
+    // Single: one Karoo tile, split by a 1 px line in the Karoo's border grey, edge to edge.
+    // Boundaries off: the Karoo draws no cards, so neither do we (separate = no line, like its own fields).
+    const divider = '#7D7D7D';
+    const halves = layout === 'side'
+      ? [{ x: r.x, y: r.y, w: r.w / 2, h: r.h }, { x: r.x + r.w / 2, y: r.y, w: r.w / 2, h: r.h }]
+      : [{ x: r.x, y: r.y, w: r.w, h: r.h / 2 }, { x: r.x, y: r.y + r.h / 2, w: r.w, h: r.h / 2 }];
+    const f1 = half(ctx, halves[0], a, dark, { ...opts, ...(opts.first || {}) }), f2 = half(ctx, halves[1], b, dark, { ...opts, ...(opts.second || {}) });
+    if (opts.tiles === 'single') {
+      ctx.fillStyle = divider;
+      if (layout === 'side') ctx.fillRect(Math.round(r.x + r.w / 2) - 0.5, r.y, 1, r.h);
+      else ctx.fillRect(r.x, Math.round(r.y + r.h / 2) - 0.5, r.w, 1);
+    }
+    return;
+  }
+  const gap = layout === 'side' ? 2 : 6;
+  ctx.fillStyle = dark ? '#484848' : '#DDDDDD'; ctx.fillRect(r.x, r.y, r.w, r.h);
+  const cards = layout === 'side'
+    ? [{ x: r.x, y: r.y, w: (r.w - gap) / 2, h: r.h }, { x: r.x + (r.w + gap) / 2, y: r.y, w: (r.w - gap) / 2, h: r.h }]
+    : [{ x: r.x, y: r.y, w: r.w, h: (r.h - gap) / 2 }, { x: r.x, y: r.y + (r.h + gap) / 2, w: r.w, h: (r.h - gap) / 2 }];
+  [a, b].forEach((f, i) => {
+    const c = cards[i];
+    const path = () => { ctx.beginPath(); ctx.roundRect(c.x + 0.5, c.y + 0.5, c.w - 1, c.h - 1, 14); };
+    ctx.save(); path(); ctx.fillStyle = dark ? '#000' : '#FFF'; ctx.fill(); ctx.clip();
+    half(ctx, c, f, dark, { ...opts, ...((i === 0 ? opts.first : opts.second) || {}) });
+    ctx.restore();
+    path(); ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke();
+  });
+}
+
+// Page: data field boundaries on, quarter grid (4 rows of 168), status bar during a ride.
+function page(ctx, dark, ours, boundaries = true) {
+  const bg = dark ? '#000' : '#FFF', ink = dark ? '#FFF' : '#000';
+  ctx.fillStyle = boundaries ? (dark ? '#484848' : '#DDDDDD') : bg; ctx.fillRect(0, 0, 480, 800);
+  // status bar
+  ctx.fillStyle = ink; ctx.strokeStyle = ink; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(19, 19, 11, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(19, 19, 5, 0, Math.PI * 2); ctx.fill();
+  text(ctx, '1:12:40', 'PlexReg', 46, ink, 208, 50);
+  text(ctx, '100%', 'PlexReg', 34, ink, 318, 46, 1e9, 0.82);
+  text(ctx, '10:24', 'PlexReg', 46, ink, 470, 50);
+  const stocks = [F.speed, F.hr, F.lap, F.power, { label: 'LAP AVG SPEED', value: '29.1', icon: 'lap-speed' }, F.speed];
+  let n = 0;
+  for (let row = 0; row < 4; row++) for (let col = 0; col < 2; col++) {
+    const r = { x: col ? 241 : 1, y: 60 + row * 180, w: 238, h: 168 };
+    ctx.save(); ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14);
+    ctx.fillStyle = bg; ctx.fill(); ctx.clip();
+    const mine = ours[`${row},${col}`];
+    if (mine) mine(ctx, r); else stock(ctx, r, stocks[n++ % stocks.length], dark);
+    ctx.restore();
+    if (boundaries) { ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14);
+      ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke(); }
+  }
+}
+
+// Settings page (light), with the Example card at the top like BigWatts.
+function settings(ctx, opts) {
+  const ink = '#1C2E2E', help = '#6F6F6F';
+  ctx.fillStyle = '#FFF'; ctx.fillRect(0, 0, 480, 800);
+  text(ctx, '100%', 'PlexReg', 30, '#000', 350, 38, 1e9, 0.9); text(ctx, '10:24', 'PlexReg', 34, '#000', 470, 38);
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(66, 104); ctx.lineTo(38, 104); ctx.moveTo(50, 92); ctx.lineTo(38, 104); ctx.lineTo(50, 116); ctx.stroke();
+  ctx.font = '28px PlexMed'; ctx.fillStyle = ink; ctx.textAlign = 'center'; ctx.fillText('Settings', 240, 114);
+  ctx.textAlign = 'left'; ctx.font = '34px PlexSemi'; ctx.fillText('BetterFields', 22, 208);
+  // Example card
+  ctx.fillStyle = '#F1F1EF'; ctx.beginPath(); ctx.roundRect(22, 232, 436, 266, 18); ctx.fill();
+  ctx.font = '15px PlexSemi'; ctx.fillStyle = '#6B6A66'; ctx.fillText('EXAMPLE', 40, 262);
+  const r = { x: 121, y: 280, w: 238, h: 168 };
+  ctx.save(); ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 14); ctx.fillStyle = '#FFF'; ctx.fill(); ctx.clip();
+  betterFields(ctx, r, F.power, F.hr, false, opts); ctx.restore();
+  ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.strokeStyle = '#D5D4CF'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.font = '15px PlexMed'; ctx.fillStyle = '#6B6A66'; ctx.textAlign = 'center'; ctx.fillText('Quarter tile', 240, 478); ctx.textAlign = 'left';
+  // Field pickers
+  const picker = (y, title, value) => {
+    ctx.font = '17px PlexMed'; ctx.fillStyle = help; ctx.fillText(title, 22, y);
+    ctx.font = '26px PlexMed'; ctx.fillStyle = ink; ctx.fillText(value, 22, y + 34);
+    ctx.strokeStyle = ink; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(440, y + 14); ctx.lineTo(450, y + 24); ctx.lineTo(440, y + 34); ctx.stroke();
+    ctx.fillStyle = '#DDDDDD'; ctx.fillRect(22, y + 56, 436, 1);
+  };
+  picker(536, 'Field 1', '3s Power'); picker(614, 'Field 2', 'Heart rate');
+  ctx.font = '28px PlexMed'; ctx.fillStyle = ink; ctx.fillText('Layout', 22, 738);
+  const seg = (y, items, sel) => {
+    ctx.fillStyle = '#F4F4F4'; ctx.beginPath(); ctx.roundRect(22, y, 436, 70, 35); ctx.fill();
+    const w = 436 / items.length;
+    items.forEach((t, i) => {
+      if (i === sel) { ctx.fillStyle = '#3E5560'; ctx.beginPath(); ctx.roundRect(24 + i * w, y + 2, w - 4, 66, 33); ctx.fill(); }
+      ctx.font = '21px PlexMed'; ctx.fillStyle = i === sel ? '#FFF' : '#243535'; ctx.textAlign = 'center';
+      ctx.fillText(t, 22 + i * w + w / 2, y + 43); ctx.textAlign = 'left';
+    });
+  };
+  seg(756, ['Side by side', 'Stacked'], opts.layout === 'side' ? 0 : 1);
+  return seg;
+}
+// Second settings screen: scrolled down to Layout and Zone colours
+function settings2(ctx, opts) {
+  const ink = '#1C2E2E', help = '#6F6F6F';
+  ctx.fillStyle = '#FFF'; ctx.fillRect(0, 0, 480, 800);
+  text(ctx, '100%', 'PlexReg', 30, '#000', 350, 38, 1e9, 0.9); text(ctx, '10:24', 'PlexReg', 34, '#000', 470, 38);
+  const seg = (y, items, sel) => {
+    ctx.fillStyle = '#F4F4F4'; ctx.beginPath(); ctx.roundRect(22, y, 436, 70, 35); ctx.fill();
+    const w = 436 / items.length;
+    items.forEach((t, i) => {
+      if (i === sel) { ctx.fillStyle = '#3E5560'; ctx.beginPath(); ctx.roundRect(24 + i * w, y + 2, w - 4, 66, 33); ctx.fill(); }
+      ctx.font = '21px PlexMed'; ctx.fillStyle = i === sel ? '#FFF' : '#243535'; ctx.textAlign = 'center';
+      ctx.fillText(t, 22 + i * w + w / 2, y + 43); ctx.textAlign = 'left';
+    });
+  };
+  // Example card stays on top (sticky) so changes show right away
+  ctx.fillStyle = '#F1F1EF'; ctx.beginPath(); ctx.roundRect(22, 70, 436, 236, 18); ctx.fill();
+  ctx.font = '15px PlexSemi'; ctx.fillStyle = '#6B6A66'; ctx.fillText('EXAMPLE', 40, 100);
+  const r = { x: 121, y: 118, w: 238, h: 168 };
+  ctx.save(); ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 14); ctx.fillStyle = '#FFF'; ctx.fill(); ctx.clip();
+  betterFields(ctx, r, F.power, F.hr, false, opts); ctx.restore();
+  ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14); ctx.strokeStyle = '#D5D4CF'; ctx.lineWidth = 1; ctx.stroke();
+  const title = (t, y) => { ctx.font = '26px PlexMed'; ctx.fillStyle = ink; ctx.fillText(t, 22, y); };
+  title('Layout', 342); seg(354, ['Side by side', 'Stacked'], opts.layout === 'side' ? 0 : 1);
+  title('Tiles', 456); seg(468, ['Separate', 'Single'], opts.tiles === 'single' ? 1 : 0);
+  title('Number', 570); seg(582, ['Black / white', 'Zone colour'], opts.num === 'zone' ? 1 : 0);
+  title('Background', 684); seg(696, ['None', 'Karoo', 'Soft'], { none: 0, strong: 1, soft: 2 }[opts.bg || 'none']);
+}
+
+// Every Number × Background combination as bare tiles (no device): 3 rows × 2 columns.
+function combos(dark, layout, tiles) {
+  const S = 2, tw = 238, th = 168, gx = 24, top = 44, left = 96, gy = 40;
+  const c = document.createElement('canvas');
+  const W = left + 2 * tw + gx + 8, H = top + 3 * (th + gy);
+  c.width = W * S; c.height = H * S; c.style.width = '390px';
+  const ctx = c.getContext('2d'); ctx.scale(S, S);
+  ctx.fillStyle = dark ? '#484848' : '#DDDDDD'; ctx.beginPath(); ctx.roundRect(0, 0, W, H, 16); ctx.fill();
+  const lab = dark ? '#E0E0E0' : '#333';
+  ctx.font = '15px PlexSemi'; ctx.fillStyle = lab; ctx.textAlign = 'center';
+  ['Black / white', 'Zone colour'].forEach((t, i) => ctx.fillText(t, left + i * (tw + gx) + tw / 2, 28));
+  ctx.textAlign = 'left';
+  ['None', 'Karoo', 'Soft'].forEach((t, j) => {
+    const y = top + j * (th + gy);
+    ctx.font = '15px PlexSemi'; ctx.fillStyle = lab; ctx.fillText(t, 14, y + th / 2 + 5);
+    ['bw', 'zone'].forEach((num, i) => {
+      const r = { x: left + i * (tw + gx), y, w: tw, h: th };
+      ctx.save(); ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14);
+      ctx.fillStyle = dark ? '#000' : '#FFF'; ctx.fill(); ctx.clip();
+      betterFields(ctx, r, F.power, F.hr, dark, { layout, tiles, num, bg: ['none', 'strong', 'soft'][j] });
+      ctx.restore();
+      ctx.beginPath(); ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 14);
+      ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke();
+    });
+  });
+  return c;
+}
+
+// ---- Add-field flow (settings pages: light, the Karoo's settings style as in BigWatts) ----
+F.avgPower = { label: 'AVG POWER', short: 'AVG', value: '228', icon: 'bolt' };
+F.avgHr = { label: 'AVG HR', short: 'AVG', value: '128', icon: 'heart' };
+const INK = '#1C2E2E', HELP = '#6F6F6F', SEL = '#3E5560', TRACK = '#F4F4F4', LINE = '#DDDDDD';
+const FIELDS = [
+  { slot: 1, what: '3s power · Heart rate', a: F.power, b: F.hr, opts: { layout: 'side', bg: 'strong' } },
+  { slot: 2, what: 'Speed · Lap time', a: F.speed, b: F.lap, opts: { layout: 'side' } },
+  { slot: 3, what: 'Avg power · Avg HR', a: F.avgPower, b: F.avgHr, opts: { layout: 'stacked' } },
+];
+function status(ctx) {
+  text(ctx, '100%', 'PlexReg', 30, '#000', 350, 38, 1e9, 0.9); text(ctx, '10:24', 'PlexReg', 34, '#000', 470, 38);
+}
+function bar(ctx, title, close) {
+  ctx.fillStyle = '#FFF'; ctx.fillRect(0, 0, 480, 800); status(ctx);
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.beginPath();
+  if (close) { ctx.moveTo(40, 92); ctx.lineTo(64, 116); ctx.moveTo(64, 92); ctx.lineTo(40, 116); }
+  else { ctx.moveTo(66, 104); ctx.lineTo(38, 104); ctx.moveTo(50, 92); ctx.lineTo(38, 104); ctx.lineTo(50, 116); }
+  ctx.stroke();
+  ctx.font = '28px PlexMed'; ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.fillText(title, 240, 114); ctx.textAlign = 'left';
+}
+function h1(ctx, t, y) { ctx.font = '34px PlexSemi'; ctx.fillStyle = INK; ctx.textAlign = 'left'; ctx.fillText(t, 22, y); }
+function eyebrow(ctx, t, y) { ctx.font = '16px PlexSemi'; ctx.fillStyle = HELP; ctx.fillText(t.toUpperCase(), 22, y); }
+function para(ctx, lines, y, size = 19, color = HELP) {
+  ctx.font = `${size}px PlexMed`; ctx.fillStyle = color; lines.forEach((l, i) => ctx.fillText(l, 22, y + i * size * 1.45));
+}
+function button(ctx, t, y, primary = true) {
+  ctx.fillStyle = primary ? SEL : TRACK; ctx.beginPath(); ctx.roundRect(22, y, 436, 72, 36); ctx.fill();
+  ctx.font = '24px PlexMed'; ctx.fillStyle = primary ? '#FFF' : INK; ctx.textAlign = 'center'; ctx.fillText(t, 240, y + 46); ctx.textAlign = 'left';
+}
+function steps(ctx, n, of = 4) {
+  for (let i = 0; i < of; i++) { ctx.fillStyle = i < n ? SEL : LINE; ctx.beginPath(); ctx.roundRect(22 + i * 111, 146, 103, 6, 3); ctx.fill(); }
+}
+// A field tile at any scale (238 × 168 quarter page), on the example card grey
+function tile(ctx, x, y, s, f, dark = false) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  const r = { x: 0, y: 0, w: 238, h: 168 };
+  ctx.save(); ctx.beginPath(); ctx.roundRect(0.5, 0.5, 237, 167, 14); ctx.fillStyle = dark ? '#000' : '#FFF'; ctx.fill(); ctx.clip();
+  betterFields(ctx, r, f.a, f.b, dark, f.opts); ctx.restore();
+  ctx.beginPath(); ctx.roundRect(0.5, 0.5, 237, 167, 14); ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1 / s; ctx.stroke();
+  ctx.restore();
+}
+function exampleCard(ctx, y, f, h = 236) {
+  ctx.fillStyle = '#F1F1EF'; ctx.beginPath(); ctx.roundRect(22, y, 436, h, 18); ctx.fill();
+  tile(ctx, 121, y + (h - 168) / 2, 1, f);
+}
+function chevron(ctx, x, y) { ctx.strokeStyle = INK; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(x, y - 10); ctx.lineTo(x + 10, y); ctx.lineTo(x, y + 10); ctx.stroke(); }
+function seg(ctx, y, items, sel) {
+  ctx.fillStyle = TRACK; ctx.beginPath(); ctx.roundRect(22, y, 436, 64, 32); ctx.fill();
+  const w = 436 / items.length;
+  items.forEach((t, i) => {
+    if (i === sel) { ctx.fillStyle = SEL; ctx.beginPath(); ctx.roundRect(24 + i * w, y + 2, w - 4, 60, 30); ctx.fill(); }
+    ctx.font = '20px PlexMed'; ctx.fillStyle = i === sel ? '#FFF' : '#243535'; ctx.textAlign = 'center';
+    ctx.fillText(t, 22 + i * w + w / 2, y + 40); ctx.textAlign = 'left';
+  });
+}
+// A big choice: preview tile + name, selected = dark ring and a check
+function choice(ctx, x, y, w, h, label, f, selected) {
+  ctx.fillStyle = '#F1F1EF'; ctx.beginPath(); ctx.roundRect(x, y, w, h, 18); ctx.fill();
+  if (selected) { ctx.strokeStyle = SEL; ctx.lineWidth = 4; ctx.beginPath(); ctx.roundRect(x + 2, y + 2, w - 4, h - 4, 16); ctx.stroke(); }
+  const s = Math.min((w - 40) / 238, (h - 70) / 168);
+  tile(ctx, x + (w - 238 * s) / 2, y + 16, s, f);
+  ctx.font = '21px PlexMed'; ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.fillText(label, x + w / 2, y + h - 20); ctx.textAlign = 'left';
+  if (selected) {
+    ctx.fillStyle = SEL; ctx.beginPath(); ctx.arc(x + w - 24, y + 24, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#FFF'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x + w - 31, y + 24); ctx.lineTo(x + w - 26, y + 29); ctx.lineTo(x + w - 17, y + 19); ctx.stroke();
+  }
+}
+function row(ctx, y, title, value) {
+  ctx.font = '17px PlexMed'; ctx.fillStyle = HELP; ctx.fillText(title, 22, y);
+  ctx.font = '25px PlexMed'; ctx.fillStyle = INK; ctx.fillText(value, 22, y + 33);
+  chevron(ctx, 444, y + 14);
+  ctx.fillStyle = LINE; ctx.fillRect(22, y + 54, 436, 1);
+}
+
+// The field's number, big: what the rider picks in the Karoo's list
+function badge(ctx, n, x, y, size = 44) {
+  ctx.fillStyle = SEL; ctx.beginPath(); ctx.roundRect(x, y, size, size, size * 0.28); ctx.fill();
+  ctx.font = `${size * 0.6}px PlexSemi`; ctx.fillStyle = '#FFF'; ctx.textAlign = 'center';
+  ctx.fillText(String(n), x + size / 2, y + size * 0.72); ctx.textAlign = 'left';
+}
+// Empty state: the same words under every illustration
+function emptyText(ctx) {
+  ctx.textAlign = 'center';
+  ctx.font = '31px PlexSemi'; ctx.fillStyle = INK; ctx.fillText('No fields yet', 240, 538);
+  ctx.font = '19px PlexMed'; ctx.fillStyle = HELP;
+  ctx.fillText('Press “Add field” to create', 240, 578);
+  ctx.fillText('your first BetterField.', 240, 604);
+  ctx.textAlign = 'left';
+}
+function dashed(ctx, x, y, w, h, r) {
+  ctx.save(); ctx.setLineDash([8, 6]); ctx.strokeStyle = '#B9B9B4'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.stroke(); ctx.restore();
+}
+function plus(ctx, cx, cy, size, color = SEL) {
+  ctx.strokeStyle = color; ctx.lineWidth = size / 6; ctx.lineCap = 'round'; ctx.beginPath();
+  ctx.moveTo(cx - size / 2, cy); ctx.lineTo(cx + size / 2, cy); ctx.moveTo(cx, cy - size / 2); ctx.lineTo(cx, cy + size / 2); ctx.stroke();
+  ctx.lineCap = 'butt';
+}
+// B · a small Karoo ride page with an empty, dashed spot where your field goes
+function emptyPage(ctx) {
+  const s = 0.4, w = 480 * s, h = 800 * s, x = 240 - w / 2, y = 160;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.16)'; ctx.shadowBlur = 24; ctx.shadowOffsetY = 8;
+  ctx.fillStyle = '#222'; ctx.beginPath(); ctx.roundRect(x - 10, y - 10, w + 20, h + 20, 22); ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, 12); ctx.clip();
+  ctx.translate(x, y); ctx.scale(s, s);
+  page(ctx, false, { '1,0': (c, r) => {
+    c.fillStyle = '#F1F1EF'; c.fillRect(r.x, r.y, r.w, r.h);
+    c.save(); c.setLineDash([16, 12]); c.strokeStyle = SEL; c.lineWidth = 4;
+    c.beginPath(); c.roundRect(r.x + 10, r.y + 10, r.w - 20, r.h - 20, 12); c.stroke(); c.restore();
+    plus(c, r.x + r.w / 2, r.y + r.h / 2, 56);
+  } });
+  ctx.restore();
+}
+// C · one big example tile, marked as an example
+function emptyHero(ctx) {
+  const f = FIELDS[0], s = 1.3, w = 238 * s, h = 168 * s, x = 240 - w / 2, y = 222;
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.14)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 10;
+  ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.roundRect(x, y, w, h, 18); ctx.fill(); ctx.restore();
+  tile(ctx, x, y, s, f);
+  ctx.fillStyle = TRACK; ctx.beginPath(); ctx.roundRect(240 - 52, y - 46, 104, 30, 15); ctx.fill();
+  ctx.font = '14px PlexSemi'; ctx.fillStyle = HELP; ctx.textAlign = 'center'; ctx.fillText('EXAMPLE', 240, y - 26); ctx.textAlign = 'left';
+}
+// D · the list as it will be, in outline, with the first row inviting you
+function emptySkeleton(ctx) {
+  for (let i = 0; i < 3; i++) {
+    const y = 170 + i * 104, a = i === 0 ? 1 : 0.55 - i * 0.15;
+    ctx.save(); ctx.globalAlpha = a;
+    dashed(ctx, 22, y, 132, 86, 14);
+    if (i === 0) plus(ctx, 88, y + 43, 30);
+    ctx.fillStyle = '#E6E6E2';
+    ctx.beginPath(); ctx.roundRect(176, y + 22, 120, 18, 9); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(176, y + 52, 200, 14, 7); ctx.fill();
+    ctx.restore();
+  }
+}
+// 1 · Your fields (list)
+function yourFields(ctx, empty, variant = 'cards') {
+  bar(ctx, 'Settings'); if (!empty) h1(ctx, 'Your fields', 208);
+  if (empty) {
+    if (variant === 'page') emptyPage(ctx);
+    else if (variant === 'hero') emptyHero(ctx);
+    else if (variant === 'skeleton') emptySkeleton(ctx);
+    else {
+    // Illustration: three made-up fields, tilted and stacked like cards, so it reads as
+    // "this is what you'll have" rather than real data.
+    const fake = (cx, cy, rot, n, f, what) => {
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot * Math.PI / 180);
+      const w = 252, h = 156, x = -w / 2, y = -h / 2;
+      ctx.shadowColor = 'rgba(0,0,0,0.13)'; ctx.shadowBlur = 26; ctx.shadowOffsetY = 8;
+      ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.roundRect(x, y, w, h, 20); ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.strokeStyle = '#E4E4E0'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.font = '20px PlexSemi'; ctx.fillStyle = INK; ctx.fillText(`Field ${n}`, x + 16, y + 36);
+      ctx.font = '15px PlexMed'; ctx.fillStyle = HELP; ctx.textAlign = 'right'; ctx.fillText(what, x + w - 16, y + 36); ctx.textAlign = 'left';
+      tile(ctx, x + 16, y + 62, 0.48, f);
+      ctx.restore();
+    };
+    fake(206, 386, 2.5, 3, FIELDS[2], 'Avg power · HR');
+    fake(196, 250, -3.5, 1, FIELDS[0], '3s power · HR');
+    fake(296, 330, 1.5, 2, FIELDS[1], 'Speed · Lap');
+    }
+    emptyText(ctx);
+  } else {
+    FIELDS.forEach((f, i) => {
+      const y = 236 + i * 150;
+      tile(ctx, 22, y, 0.66, f);
+      ctx.font = '26px PlexSemi'; ctx.fillStyle = INK; ctx.fillText(`Field ${f.slot}`, 196, y + 46);
+      ctx.font = '17px PlexMed'; ctx.fillStyle = HELP; ctx.fillText(f.what, 196, y + 80);
+      chevron(ctx, 444, y + 56);
+      if (i < FIELDS.length - 1) { ctx.fillStyle = LINE; ctx.fillRect(22, y + 128, 436, 1); }
+    });
+  }
+  button(ctx, '+  Add field', 700);
+}
+// 3 · Data
+function stepData(ctx) {
+  bar(ctx, 'New field', true); steps(ctx, 1); eyebrow(ctx, 'Step 1 of 4', 200); h1(ctx, 'What it shows', 246);
+  exampleCard(ctx, 272, { ...FIELDS[0], opts: { layout: 'side' } }, 210);
+  row(ctx, 516, 'First', '3s power');
+  row(ctx, 600, 'Second', 'Heart rate');
+  button(ctx, 'Next', 700);
+}
+// 4 · Layout
+function stepLayout(ctx) {
+  bar(ctx, 'New field', true); steps(ctx, 2); eyebrow(ctx, 'Step 2 of 4', 200); h1(ctx, 'Layout', 246);
+  const f = FIELDS[0];
+  choice(ctx, 22, 276, 212, 240, 'Side by side', { ...f, opts: { layout: 'side' } }, true);
+  choice(ctx, 246, 276, 212, 240, 'Stacked', { ...f, opts: { layout: 'stacked' } }, false);
+  para(ctx, ['Stacked suits wide fields (a full row).'], 566);
+  button(ctx, 'Next', 700);
+}
+// 5 · Tiles
+function stepTiles(ctx) {
+  bar(ctx, 'New field', true); steps(ctx, 3); eyebrow(ctx, 'Step 3 of 4', 200); h1(ctx, 'Tiles', 246);
+  const f = FIELDS[0];
+  choice(ctx, 22, 276, 212, 240, 'Separate', { ...f, opts: { layout: 'side' } }, true);
+  choice(ctx, 246, 276, 212, 240, 'Single', { ...f, opts: { layout: 'side', tiles: 'single' } }, false);
+  para(ctx, ['Separate looks like two small Karoo tiles.', 'Without data field boundaries both look', 'the same: no tiles, no line.'], 566);
+  button(ctx, 'Next', 700);
+}
+// 6 · Colours
+function stepColours(ctx) {
+  bar(ctx, 'New field', true); steps(ctx, 4); eyebrow(ctx, 'Step 4 of 4', 200); h1(ctx, 'Colours', 246);
+  exampleCard(ctx, 268, FIELDS[0], 200);
+  ctx.font = '22px PlexMed'; ctx.fillStyle = INK; ctx.fillText('Number', 22, 506); seg(ctx, 518, ['Black / white', 'Zone colour'], 0);
+  ctx.font = '22px PlexMed'; ctx.fillStyle = INK; ctx.fillText('Background', 22, 616); seg(ctx, 628, ['None', 'Karoo', 'Soft'], 1);
+  button(ctx, 'Save field', 712);
+}
+// 7 · Done: the number to remember, and where to pick it
+function stepDone(ctx) {
+  bar(ctx, 'New field', true);
+  // Card: even 32 px padding top and bottom, everything on one centre line
+  const top = 168, pad = 32, cx = 240;
+  ctx.fillStyle = '#F1F1EF'; ctx.beginPath(); ctx.roundRect(22, top, 436, 266, 18); ctx.fill();
+  ctx.textAlign = 'center'; ctx.font = '64px PlexSemi'; ctx.fillStyle = INK; ctx.fillText('Field 4', cx, top + pad + 70); ctx.textAlign = 'left';
+  ctx.textAlign = 'center';
+  ctx.font = '30px PlexSemi'; ctx.fillStyle = INK; ctx.fillText('Remember the name', cx, top + pad + 84 + 50);
+  ctx.font = '19px PlexMed'; ctx.fillStyle = HELP;
+  ctx.fillText('It’s what you pick in the Karoo’s list', cx, top + pad + 84 + 88);
+  ctx.fillText('of fields, under DDB BetterFields.', cx, top + pad + 84 + 116);
+  ctx.textAlign = 'left';
+  // Steps, on the page's left edge like every other text
+  ctx.font = '20px PlexSemi'; ctx.fillStyle = INK; ctx.fillText('Put it on a ride page', 22, 486);
+  const lines = ['Profiles › your profile › a page', 'Tap a field, then DDB BetterFields', 'Pick Field 4'];
+  lines.forEach((l, i) => {
+    const y = 528 + i * 40;
+    ctx.fillStyle = TRACK; ctx.beginPath(); ctx.arc(36, y - 7, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.font = '16px PlexSemi'; ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.fillText(String(i + 1), 36, y - 1); ctx.textAlign = 'left';
+    ctx.font = (i === 2 ? '20px PlexSemi' : '20px PlexMed'); ctx.fillText(l, 62, y);
+  });
+  button(ctx, 'Done', 700);
+}
+// 8 · Edit an existing field
+function s_fix() {}
+function editField(ctx) {
+  bar(ctx, 'Your fields'); h1(ctx, 'Field 1', 206);
+  s_fix(ctx);
+  exampleCard(ctx, 262, FIELDS[0], 200);
+  row(ctx, 494, 'First', '3s power');
+  row(ctx, 572, 'Second', 'Heart rate');
+  ctx.font = '22px PlexMed'; ctx.fillStyle = INK; ctx.fillText('Layout', 22, 680); seg(ctx, 694, ['Side by side', 'Stacked'], 0);
+}
+function editField2(ctx) {
+  bar(ctx, 'Your fields');
+  exampleCard(ctx, 70, FIELDS[0], 200);
+  ctx.font = '22px PlexMed'; ctx.fillStyle = INK;
+  ctx.fillText('Tiles', 22, 312); seg(ctx, 324, ['Separate', 'Single'], 0);
+  ctx.fillStyle = INK; ctx.font = '22px PlexMed'; ctx.fillText('Number', 22, 428); seg(ctx, 440, ['Black / white', 'Zone colour'], 0);
+  ctx.fillStyle = INK; ctx.font = '22px PlexMed'; ctx.fillText('Background', 22, 544); seg(ctx, 556, ['None', 'Karoo', 'Soft'], 1);
+  ctx.fillStyle = LINE; ctx.fillRect(22, 652, 436, 1);
+  ctx.font = '22px PlexMed'; ctx.fillStyle = '#C4302B'; ctx.fillText('Delete field', 22, 704);
+  ctx.font = '17px PlexMed'; ctx.fillStyle = HELP; ctx.fillText('Field 1 is free again. On your ride pages it shows', 22, 736); ctx.fillText('“Not set up yet” until you make a new Field 1.', 22, 760);
+}
+// 9 · On the Karoo: a field from the pool that has no set-up yet
+function notSetUp(ctx, r, dark) {
+  const ink = dark ? '#FFF' : '#000', sub = dark ? '#B4B2A9' : '#6F6F6F';
+  ctx.textAlign = 'center';
+  ctx.font = '26px PlexCond'; ctx.fillStyle = ink; ctx.fillText('FIELD 4', r.x + r.w / 2, r.y + 62);
+  ctx.font = '19px PlexMed'; ctx.fillStyle = sub;
+  ctx.fillText('Not set up yet.', r.x + r.w / 2, r.y + 98); ctx.fillText('Open the BetterFields app.', r.x + r.w / 2, r.y + 124);
+  ctx.textAlign = 'left';
+}
+
+
+// ---- Per-field colours ----
+const MIX = { layout: 'side', numFont: 'PlexMed', first: { bg: 'strong', num: 'bw' }, second: { bg: 'none', num: 'zone' } };
+const MIXF = { a: F.power, b: F.hr, opts: MIX };
+function label(ctx, t, y, size = 22, color = INK, font = 'PlexMed') { ctx.font = `${size}px ${font}`; ctx.fillStyle = color; ctx.fillText(t, 22, y); }
+function segS(ctx, y, items, sel) {           // a slimmer segmented control (52 px)
+  ctx.fillStyle = TRACK; ctx.beginPath(); ctx.roundRect(22, y, 436, 52, 26); ctx.fill();
+  const w = 436 / items.length;
+  items.forEach((t, i) => {
+    if (i === sel) { ctx.fillStyle = SEL; ctx.beginPath(); ctx.roundRect(24 + i * w, y + 2, w - 4, 48, 24); ctx.fill(); }
+    ctx.font = '18px PlexMed'; ctx.fillStyle = i === sel ? '#FFF' : '#243535'; ctx.textAlign = 'center';
+    ctx.fillText(t, 22 + i * w + w / 2, y + 33); ctx.textAlign = 'left';
+  });
+}
+// A · both fields' colours on one page, one group each (scrolls)
+function colourGroup(ctx, y, icon, name, num, bg) {
+  ctx.fillStyle = '#F1F1EF'; ctx.beginPath(); ctx.roundRect(22, y, 436, 226, 16); ctx.fill();
+  ctx.font = '22px PlexSemi'; ctx.fillStyle = INK; ctx.fillText(name, 40, y + 38);
+  ctx.save(); ctx.translate(0, 0);
+  ctx.font = '16px PlexMed'; ctx.fillStyle = HELP; ctx.fillText('Number', 40, y + 72);
+  ctx.restore();
+  const s = (yy, items, sel) => {          // inside the group: 400 wide
+    ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.roundRect(36, yy, 408, 48, 24); ctx.fill();
+    const w = 408 / items.length;
+    items.forEach((t, i) => {
+      if (i === sel) { ctx.fillStyle = SEL; ctx.beginPath(); ctx.roundRect(38 + i * w, yy + 2, w - 4, 44, 22); ctx.fill(); }
+      ctx.font = '17px PlexMed'; ctx.fillStyle = i === sel ? '#FFF' : '#243535'; ctx.textAlign = 'center';
+      ctx.fillText(t, 36 + i * w + w / 2, yy + 31); ctx.textAlign = 'left';
+    });
+  };
+  s(y + 82, ['Black / white', 'Zone colour'], num);
+  ctx.font = '16px PlexMed'; ctx.fillStyle = HELP; ctx.fillText('Background', 40, y + 160);
+  s(y + 170, ['None', 'Karoo', 'Soft'], bg);
+}
+function colourA1(ctx) {
+  bar(ctx, 'New field', true); steps(ctx, 4); eyebrow(ctx, 'Step 4 of 4', 200); h1(ctx, 'Colours', 246);
+  exampleCard(ctx, 266, MIXF, 196);
+  colourGroup(ctx, 478, 'bolt', '3s power', 0, 1);
+  button(ctx, 'Save field', 712);
+}
+function colourA2(ctx) {
+  bar(ctx, 'New field', true);
+  exampleCard(ctx, 160, MIXF, 196);       // the Example stays on top while you scroll
+  colourGroup(ctx, 372, 'bolt', '3s power', 0, 1);
+  ctx.fillStyle = '#FFF'; ctx.fillRect(0, 372, 480, 128);   // scrolled: only the end of group 1 shows
+  ctx.font = '16px PlexMed'; ctx.fillStyle = HELP;
+  colourGroup(ctx, 470, 'heart', 'Heart rate', 1, 0);
+  button(ctx, 'Save field', 712);
+}
+// B · pick which field, then its colours; the picked half has a ring in the Example
+function colourB(ctx, which) {
+  bar(ctx, 'New field', true); steps(ctx, 4); eyebrow(ctx, 'Step 4 of 4', 200); h1(ctx, 'Colours', 246);
+  exampleCard(ctx, 262, MIXF, 186);
+  const x = which === 0 ? 121 : 240, y = 262 + (186 - 168) / 2;
+  ctx.strokeStyle = SEL; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(x - 3, y - 3, 119 + 6, 168 + 6, 16); ctx.stroke();
+  segS(ctx, 464, ['3s power', 'Heart rate'], which);
+  const o = which === 0 ? MIX.first : MIX.second;
+  label(ctx, 'Number', 554, 19); segS(ctx, 564, ['Black / white', 'Zone colour'], o.num === 'zone' ? 1 : 0);
+  label(ctx, 'Background', 640, 19); segS(ctx, 650, ['None', 'Karoo', 'Soft'], { none: 0, strong: 1, soft: 2 }[o.bg]);
+  button(ctx, 'Save field', 718);
+}
+// Number weight: our field next to the Karoo's own (a 141 px row, as on the map page), field only
+function weightStrip(dark, font) {
+  const S = 2, W = 478, H = 141, c = document.createElement('canvas');
+  c.width = W * S; c.height = H * S; c.style.width = '400px';
+  const ctx = c.getContext('2d'); ctx.scale(S, S);
+  ctx.fillStyle = dark ? '#484848' : '#DDDDDD'; ctx.fillRect(0, 0, W, H);
+  const card = (x, draw) => {
+    const r = { x, y: 0, w: 238, h: H };
+    ctx.save(); ctx.beginPath(); ctx.roundRect(x + 0.5, 0.5, 237, H - 1, 14); ctx.fillStyle = dark ? '#000' : '#FFF'; ctx.fill(); ctx.clip();
+    draw(r); ctx.restore();
+    ctx.beginPath(); ctx.roundRect(x + 0.5, 0.5, 237, H - 1, 14); ctx.strokeStyle = '#7D7D7D'; ctx.lineWidth = 1; ctx.stroke();
+  };
+  card(0, r => betterFields(ctx, r, { ...F.power, value: '245' }, { ...F.hr, value: '141' }, dark, { layout: 'side', numFont: font }));
+  card(240, r => stock(ctx, r, { label: 'AVG SPEED', value: '0', icon: 'speed' }, dark));
+  return c;
+}
+
+// ---- Round 2: always clear which field you are colouring ----
+// The Example sticks to the top of Edit; the field being coloured has a ring, the other is faded.
+function stickyExample(ctx, which, hint) {
+  ctx.fillStyle = '#FFF'; ctx.fillRect(0, 130, 480, 230);
+  ctx.fillStyle = '#F1F1EF'; ctx.beginPath(); ctx.roundRect(22, 146, 436, hint ? 206 : 186, 18); ctx.fill();
+  const s = 0.9, w = 238 * s, h = 168 * s, x = 240 - w / 2, y = 158;
+  tile(ctx, x, y, s, MIXF);
+  const hx = which === 0 ? x : x + w / 2;
+  ctx.fillStyle = 'rgba(241,241,239,0.62)'; ctx.fillRect(which === 0 ? x + w / 2 + 1 : x, y, w / 2 - 1, h);
+  ctx.strokeStyle = SEL; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.roundRect(hx - 3, y - 3, w / 2 + 6, h + 6, 15); ctx.stroke();
+  if (hint) { ctx.font = '16px PlexMed'; ctx.fillStyle = HELP; ctx.textAlign = 'center'; ctx.fillText('Tap a field to change its colours', 240, 340); ctx.textAlign = 'left'; }
+  ctx.fillStyle = LINE; ctx.fillRect(0, hint ? 360 : 340, 480, 1);
+}
+function inlineRow(ctx, y, title, items, sel) {
+  ctx.font = '19px PlexMed'; ctx.fillStyle = INK; ctx.fillText(title, 22, y + 32);
+  const x0 = 150, W = 308; ctx.fillStyle = TRACK; ctx.beginPath(); ctx.roundRect(x0, y, W, 48, 24); ctx.fill();
+  const w = W / items.length;
+  items.forEach((t, i) => {
+    if (i === sel) { ctx.fillStyle = SEL; ctx.beginPath(); ctx.roundRect(x0 + 2 + i * w, y + 2, w - 4, 44, 22); ctx.fill(); }
+    ctx.font = '17px PlexMed'; ctx.fillStyle = i === sel ? '#FFF' : '#243535'; ctx.textAlign = 'center';
+    ctx.fillText(t, x0 + i * w + w / 2, y + 31); ctx.textAlign = 'left';
+  });
+}
+// A field button with its icon, for picking which field to colour
+function fieldButtons(ctx, y, which) {
+  [['bolt', '3s power'], ['heart', 'Heart rate']].forEach(([icon, name], i) => {
+    const x = 22 + i * 224, w = 212, sel = i === which;
+    ctx.fillStyle = sel ? SEL : TRACK; ctx.beginPath(); ctx.roundRect(x, y, w, 56, 16); ctx.fill();
+    const img = ICONS_IMG[`${icon}-${sel ? 'dark' : 'light'}`];
+    ctx.save(); ctx.globalCompositeOperation = sel ? 'screen' : 'multiply';
+    ctx.drawImage(img, x + 16, y + 12, img.width * 0.8, img.height * 0.8); ctx.restore();
+    ctx.font = '19px PlexSemi'; ctx.fillStyle = sel ? '#FFF' : INK; ctx.fillText(name, x + 56, y + 36);
+  });
+}
+function editA(ctx, which) {
+  bar(ctx, 'Field 1');
+  // scrolled down to the colours; the Example stays on top
+  ctx.font = '24px PlexSemi'; ctx.fillStyle = INK; ctx.fillText('Colours', 22, 390);
+  fieldButtons(ctx, 408, which);
+  const o = which === 0 ? MIX.first : MIX.second;
+  inlineRow(ctx, 486, 'Number', ['Black / white', 'Zone'], o.num === 'zone' ? 1 : 0);
+  inlineRow(ctx, 548, 'Background', ['None', 'Karoo', 'Soft'], { none: 0, strong: 1, soft: 2 }[o.bg]);
+  ctx.fillStyle = LINE; ctx.fillRect(22, 626, 436, 1);
+  ctx.font = '22px PlexMed'; ctx.fillStyle = '#C4302B'; ctx.fillText('Delete field', 22, 676);
+  stickyExample(ctx, which, false);
+}
+function editB(ctx, which) {
+  bar(ctx, 'Field 1');
+  const name = which === 0 ? '3s power' : 'Heart rate', icon = which === 0 ? 'bolt' : 'heart';
+  const img = ICONS_IMG[`${icon}-light`];
+  ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.drawImage(img, 18, 386, img.width * 0.85, img.height * 0.85); ctx.restore();
+  ctx.font = '24px PlexSemi'; ctx.fillStyle = INK; ctx.fillText(`${name} colours`, 60, 412);
+  const o = which === 0 ? MIX.first : MIX.second;
+  inlineRow(ctx, 436, 'Number', ['Black / white', 'Zone'], o.num === 'zone' ? 1 : 0);
+  inlineRow(ctx, 498, 'Background', ['None', 'Karoo', 'Soft'], { none: 0, strong: 1, soft: 2 }[o.bg]);
+  ctx.fillStyle = LINE; ctx.fillRect(22, 576, 436, 1);
+  ctx.font = '22px PlexMed'; ctx.fillStyle = '#C4302B'; ctx.fillText('Delete field', 22, 626);
+  stickyExample(ctx, which, true);
+}
+let ICONS_IMG = {};
+(async () => {
+  await document.fonts.load('40px PlexReg'); await document.fonts.load('40px PlexCond');
+  await document.fonts.load('40px PlexMed'); await document.fonts.load('40px PlexSemi');
+  for (const [k, v] of Object.entries(ICONS)) ICONS_IMG[k] = await img(v);
+  const blank = document.createElement('canvas'); blank.width = 480; blank.height = 800;
+  const dev = await KarooDevice.load({ frame: '__FRAME__', screen: blank.toDataURL() });
+  const out = document.getElementById('out');
+  const section = (title, note, makers) => {
+    const h = document.createElement('h2'); h.textContent = title; out.append(h);
+    if (note) { const p = document.createElement('p'); p.className = 'note'; p.textContent = note; out.append(p); }
+    const row = document.createElement('div'); row.className = 'row'; out.append(row);
+    for (const draw of makers) row.append(dev.device(dev.screen({ draw, scale: 2 }), 380));
+  };
+  const strips = (title, note, font) => {
+    const h = document.createElement('h2'); h.textContent = title; out.append(h);
+    if (note) { const p = document.createElement('p'); p.className = 'note'; p.textContent = note; out.append(p); }
+    const row = document.createElement('div'); row.className = 'row'; out.append(row);
+    row.append(weightStrip(false, font), weightStrip(true, font));
+  };
+  section('Round 2 · A · Example on top, field buttons', 'Edit, scrolled down to Colours. The Example stays at the top of the screen; the field you colour has a ring, the other is faded. Pick the field with its own button (icon + name). Number and Background on one line each, so nothing jumps.', [ctx => editA(ctx, 0), ctx => editA(ctx, 1)]);
+  section('Round 2 · B · Tap the field in the Example (picked)', 'Same sticky Example, but you tap the half you want to colour (“Tap a field to change its colours”). The section is named after it: “3s power colours”, with its icon.', [ctx => editB(ctx, 0), ctx => editB(ctx, 1)]);
+  section('Picked: B + Medium · on a ride page', 'Numbers in Plex Medium. Each field has its own Number and Background. Here 3s power has the Karoo zone background, heart rate a zone-coloured number on no background.', [false, true].map(dark => ctx => page(ctx, dark, {
+    '1,0': (c, r) => betterFields(c, r, F.power, F.hr, dark, MIX),
+    '2,1': (c, r) => betterFields(c, r, F.speed, F.lap, dark, { layout: 'side', numFont: 'PlexMed' }),
+  })));
+  section('A · Both fields on one page', 'Step 4 (and Edit): a group per field, Number and Background in each. Longer: you scroll to the second field (right). The Example stays on top.', [colourA1, colourA2]);
+  section('B · Pick a field, then its colours (picked)', 'Step 4 (and Edit): choose 3s power or Heart rate, its half gets a ring in the Example, set its Number and Background. Fits one screen.', [ctx => colourB(ctx, 0), ctx => colourB(ctx, 1)]);
+  strips('Number weight · Now (Regular)', 'Your Field 1 next to the Karoo’s own AVG SPEED, as on your map page. Same font and weight as the Karoo’s, but at half the size the strokes look thin.', 'PlexReg');
+  strips('Number weight · Medium (picked)', 'One step heavier.', 'PlexMed');
+  strips('Number weight · SemiBold', 'Two steps heavier (BigWatts’ number weight).', 'PlexSemi');
+})();
+</script>

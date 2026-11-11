@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A field the rider hasn't made yet: its name in the Karoo's capitals, then where to set it up.
+     The Karoo draws the tile; centred, so it stays centred at any height. Filled in by FieldViews. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:gravity="center" android:paddingLeft="8px" android:paddingRight="8px">
+    <TextView android:id="@+id/title" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:fontFamily="@font/plex_condensed_medium" android:maxLines="1" />
+    <TextView android:id="@+id/line1" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:fontFamily="@font/plex_regular" android:maxLines="1" />
+    <TextView android:id="@+id/line2" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:fontFamily="@font/plex_regular" android:maxLines="1" />
+</LinearLayout>

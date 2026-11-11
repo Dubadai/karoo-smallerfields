@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DDB SmallerFields</string>
+    <string name="app_short_name">SmallerFields</string>
+    <string name="extension_name">DDB SmallerFields</string>
+    <string name="field_name_1">Field 1</string>
+    <string name="field_name_2">Field 2</string>
+    <string name="field_name_3">Field 3</string>
+    <string name="field_name_4">Field 4</string>
+    <string name="field_name_5">Field 5</string>
+    <string name="field_name_6">Field 6</string>
+    <string name="field_name_7">Field 7</string>
+    <string name="field_name_8">Field 8</string>
+    <string name="field_name_9">Field 9</string>
+    <string name="field_name_10">Field 10</string>
+    <string name="field_description">Two data fields in one tile. Pick them in the SmallerFields app.</string>
+
+    <!-- Settings: Your fields, Add field, Edit -->
+    <string name="close">Close</string>
+    <string name="your_fields">Your fields</string>
+    <string name="field_n">Field %1$d</string>
+    <string name="add_field">+  Add field</string>
+    <string name="empty_title">No fields yet</string>
+    <string name="empty_text">Press “Add field” to create\nyour first SmallerField.</string>
+    <string name="all_used">All 10 fields are in use. Delete one to make another.</string>
+    <string name="new_field">New field</string>
+    <string name="step_n">Step %1$d of 4</string>
+    <string name="next">Next</string>
+    <string name="save_field">Save field</string>
+    <string name="done">Done</string>
+    <string name="step_data">What it shows</string>
+    <string name="step_layout">Layout</string>
+    <string name="step_tiles">Tiles</string>
+    <string name="step_colours">Colours</string>
+    <string name="setting_first">First</string>
+    <string name="setting_second">Second</string>
+    <string name="layout_side">Side by side</string>
+    <string name="layout_stacked">Stacked</string>
+    <string name="layout_help">Stacked suits wide fields (a full row).</string>
+    <string name="tiles_separate">Separate</string>
+    <string name="tiles_single">Single</string>
+    <string name="tiles_help">Separate looks like two small Karoo tiles. Without data field boundaries both look the same: no tiles, no line.</string>
+    <string name="setting_layout">Layout</string>
+    <string name="setting_tiles">Tiles</string>
+    <string name="setting_number">Number</string>
+    <string name="number_plain">Numeric</string>
+    <string name="number_zone">Visual</string>
+    <string name="setting_background">Background</string>
+    <string name="background_none">None</string>
+    <string name="background_karoo">Zone Color</string>
+    <string name="background_soft">Soft</string>
+    <string name="zones_help">Zone colours for power and heart rate, from your Karoo rider profile.</string>
+    <string name="remember_name">Remember the name</string>
+    <string name="remember_text">It’s what you pick in the Karoo’s list of fields, under DDB SmallerFields.</string>
+    <string name="put_on_page">Put it on a ride page</string>
+    <string name="how_1">Profiles › your profile › a page</string>
+    <string name="how_2">Tap a field, then DDB SmallerFields</string>
+    <string name="how_3">Pick Field %1$d</string>
+    <string name="delete_field">Delete field</string>
+    <string name="delete_help">Field %1$d is free again. On your ride pages it shows “Not set up yet” until you make a new Field %1$d.</string>
+    <string name="delete_confirm">Delete Field %1$d?</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="pick_data">Choose data</string>
+    <string name="tap_hint">Tap a field to change its colours</string>
+    <string name="colours_of">%1$s colours</string>
+    <string name="not_set_up">Not set up yet.</string>
+    <string name="open_app">Open the SmallerFields app.</string>
+    <string name="example_description">The field with these settings</string>
+
+    <!-- Data names (the picker) -->
+    <string name="m_power">Power</string>
+    <string name="m_power_3s">3s Power</string>
+    <string name="m_power_10s">10s Power</string>
+    <string name="m_power_avg">Avg Power</string>
+    <string name="m_power_np">Normalized Power</string>
+    <string name="m_power_lap">Lap Power</string>
+    <string name="m_hr">Heart Rate</string>
+    <string name="m_hr_avg">Avg Heart Rate</string>
+    <string name="m_hr_lap">Lap Heart Rate</string>
+    <string name="m_cadence">Cadence</string>
+    <string name="m_speed">Speed</string>
+    <string name="m_speed_avg">Avg Speed</string>
+    <string name="m_distance">Distance</string>
+    <string name="m_ride_time">Ride Time</string>
+    <string name="m_lap_time">Lap Time</string>
+    <string name="m_ascent">Ascent</string>
+    <string name="m_grade">Grade</string>
+
+</resources>

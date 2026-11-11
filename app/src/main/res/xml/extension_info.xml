@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keep id and typeIds once released: ride pages refer to the fields by them.
+     The Karoo reads this list once, so the app can't add or rename fields later: SmallerFields
+     ships Field 1-10, and each field the rider makes in the app takes the next free one. -->
+<ExtensionInfo
+    displayName="@string/extension_name"
+    icon="@drawable/ic_app"
+    id="smallerfields"
+    scansDevices="false">
+
+    <DataType description="@string/field_description" displayName="@string/field_name_1"
+        graphical="true" icon="@drawable/ic_app" typeId="smallerfields-1" />
+    <DataType description="@string/field_description" displayName="@string/field_name_2"
+        graphical="true" icon="@drawable/ic_app" typeId="smallerfields-2" />
+    <DataType description="@string/field_description" displayName="@string/field_name_3"
+        graphical="true" icon="@drawable/ic_app" typeId="smallerfields-3" />
+    <DataType description="@string/field_description" displayName="@string/field_name_4"
+        graphical="true" icon="@drawable/ic_app" typeId="smallerfields-4" />
+    <DataType description="@string/field_description" displayName="@string/field_name_5"
+        graphical="true" icon="@drawable/ic_app" typeId="smallerfields-5" />
+    <DataType description="@string/field_description" displayName="@string/field_name_6"
+        graphical="true" icon="@drawable/ic_app" typeId="smallerfields-6" />
+    <DataType description="@string/field_description" displayName="@string/field_name_7"
+        graphical="true" icon="@drawable/ic_app" typeId="smallerfields-7" />
+    <DataType description="@string/field_description" displayName="@string/field_name_8"
+        graphical="true" icon="@drawable/ic_app" typeId="smallerfields-8" />
+    <DataType description="@string/field_description" displayName="@string/field_name_9"
+        graphical="true" icon="@drawable/ic_app" typeId="smallerfields-9" />
+    <DataType description="@string/field_description" displayName="@string/field_name_10"
+        graphical="true" icon="@drawable/ic_app" typeId="smallerfields-10" />
+</ExtensionInfo>

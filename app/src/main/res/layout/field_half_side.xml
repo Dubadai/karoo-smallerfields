@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One data of a SmallerFields tile (side); filled in by FieldViews. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/half" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+    <!-- Zone background (tinted in code), under everything -->
+    <ImageView android:id="@+id/fill" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:scaleType="fitXY" android:visibility="gone" android:importantForAccessibility="no" />
+    <!-- Header: the Karoo's icon and label, placed in code by KarooType's header rules -->
+    <ImageView android:id="@+id/icon" android:layout_width="25px" android:layout_height="25px"
+        android:layout_gravity="top|start" android:scaleType="fitXY" android:importantForAccessibility="no" />
+    <TextView android:id="@+id/label" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_gravity="top|end" android:fontFamily="@font/plex_condensed_medium"
+        android:includeFontPadding="false" android:maxLines="1" android:textSize="28px" />
+    <!-- The number: the Karoo's font, auto-sized to the room it gets, like its own fields -->
+    <TextView android:id="@+id/value" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:gravity="bottom|end" android:fontFamily="relative" android:letterSpacing="-0.04"
+        android:includeFontPadding="false" android:maxLines="1"
+        android:autoSizeTextType="uniform" android:autoSizeMinTextSize="8px"
+        android:autoSizeMaxTextSize="400px" android:autoSizeStepGranularity="1px" />
+    <!-- "No Sensor", like the Karoo's own empty tile -->
+    <TextView android:id="@+id/empty" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal" android:fontFamily="@font/plex_condensed_medium"
+        android:includeFontPadding="false" android:maxLines="1" android:visibility="gone" />
+</FrameLayout>

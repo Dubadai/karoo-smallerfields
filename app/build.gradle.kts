@@ -28,6 +28,8 @@ val buildStamp = git("rev-parse", "--short=7", "HEAD").ifEmpty { "nogit" } +
     (if (git("status", "--porcelain", "--untracked-files=no").isNotEmpty()) "-dirty" else "")
 
 android {
+    // Unit tests: Metric loads Icon, which builds android.graphics.Path; stubs return defaults instead of throwing
+    testOptions { unitTests.isReturnDefaultValues = true }
     namespace = "com.daviddokakis.smallerfields"
     compileSdk = 36
 
@@ -81,6 +83,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.timber)
+    testImplementation("junit:junit:4.13.2")
 }
 
 // manifest.json for the GitHub release (upload it next to the APK). The Karoo's Settings › Apps

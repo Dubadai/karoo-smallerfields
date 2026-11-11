@@ -481,3 +481,100 @@ fun Context.settingsPicture(picture: android.graphics.Bitmap, description: Strin
     clipToOutline = true
     layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = px(8); bottomMargin = px(8) }
 }
+
+/**
+ * A list the rider puts in order by dragging (kit 1.1.0, UpAhead's icon priority): grey cards like
+ * [settingsListCard], each with its place (1, 2, …), an optional [leading] picture, the name, and a
+ * drag handle on the right. Drag a row by its handle; on release the list re-numbers and [onReorder]
+ * gets the new order. Only the handle drags, so the page still scrolls everywhere else.
+ */
+fun <T> Context.settingsRankList(
+    items: List<Triple<T, View?, String>>,
+    onReorder: (List<T>) -> Unit,
+): LinearLayout = LinearLayout(this).apply {
+    orientation = LinearLayout.VERTICAL
+    val order = items.toMutableList()
+    val gap = px(8)
+    fun build() {
+        removeAllViews()
+        order.forEachIndexed { i, (_, leading, title) ->
+            val row = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setBackgroundResource(R.drawable.bg_settings_card)
+                setPadding(px(14), px(8), px(8), px(8))
+                minimumHeight = px(52)
+                addView(label("${i + 1}", 14f, R.color.settings_help, 500), LinearLayout.LayoutParams(px(22), WRAP_CONTENT))
+                leading?.let { (it.parent as? android.view.ViewGroup)?.removeView(it); addView(it, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = px(12) }) }
+                addView(label(title, 16f, R.color.settings_title), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            }
+            val handle = settingsIcon(R.drawable.ic_settings_handle, 24).apply {
+                setColorFilter(getColor(R.color.settings_help))
+                setPadding(px(8), px(8), px(8), px(8))
+            }
+            row.addView(handle, LinearLayout.LayoutParams(px(40), px(40)))
+            var startY = 0f
+            handle.setOnTouchListener { _, e ->
+                when (e.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        parent?.requestDisallowInterceptTouchEvent(true)
+                        startY = e.rawY; row.elevation = px(6).toFloat(); true
+                    }
+                    android.view.MotionEvent.ACTION_MOVE -> { row.translationY = e.rawY - startY; true }
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                        val step = row.height + gap
+                        val to = (i + Math.round(row.translationY / step)).coerceIn(0, order.size - 1)
+                        row.translationY = 0f; row.elevation = 0f
+                        if (to != i) { order.add(to, order.removeAt(i)); onReorder(order.map { it.first }) }
+                        post { build() }
+                        true
+                    }
+                    else -> false
+                }
+            }
+            addView(row, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = gap })
+        }
+    }
+    build()
+}
+
+/**
+ * One choice from a list too long for [settingsSegmented] (kit 1.4.0, UpAhead's "At the top"): a row per
+ * option, the picked one on a grey card with a filled ring at the right, the others with an empty ring.
+ * The whole row is the tap target.
+ */
+fun <T> Context.settingsChoiceList(options: List<Pair<String, T>>, selected: T, onPick: (T) -> Unit): LinearLayout = LinearLayout(this).apply {
+    orientation = LinearLayout.VERTICAL
+    options.forEach { (name, value) ->
+        val picked = value == selected
+        addView(
+            LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                if (picked) setBackgroundResource(R.drawable.bg_settings_card)
+                setPadding(px(14), 0, px(10), 0)
+                minimumHeight = px(44)
+                isClickable = true
+                setOnClickListener { if (!picked) onPick(value) }
+                addView(label(name, 16f, R.color.settings_title, if (picked) 500 else 400), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                addView(ChoiceRing(context, picked), LinearLayout.LayoutParams(px(22), px(22)))
+            },
+            LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { bottomMargin = px(4) },
+        )
+    }
+}
+
+/** The ring of a [settingsChoiceList] row: filled in the kit's selected colour when picked. */
+private class ChoiceRing(context: Context, private val picked: Boolean) : View(context) {
+    private val ring = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = 2f * context.resources.displayMetrics.density
+        color = context.getColor(if (picked) R.color.segment_selected else R.color.settings_switch_thumb_off)
+    }
+    private val dot = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = context.getColor(R.color.segment_selected) }
+    override fun onDraw(c: android.graphics.Canvas) {
+        val r = minOf(width, height) / 2f
+        c.drawCircle(width / 2f, height / 2f, r - ring.strokeWidth, ring)
+        if (picked) c.drawCircle(width / 2f, height / 2f, r * 0.45f, dot)
+    }
+}
